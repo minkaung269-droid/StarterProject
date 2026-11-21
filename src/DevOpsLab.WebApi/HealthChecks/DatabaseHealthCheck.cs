@@ -5,8 +5,7 @@ namespace DevOpsLab.WebApi.HealthChecks;
 
 /// <summary>
 /// Readiness check. The service is only "ready" when the database is reachable
-/// AND every migration has been applied. This is what a Blue-Green traffic switch
-/// must wait for — a process that is merely alive is not ready to serve traffic.
+/// AND every migration has been applied.
 /// </summary>
 public sealed class DatabaseHealthCheck : IHealthCheck
 {
@@ -25,11 +24,35 @@ public sealed class DatabaseHealthCheck : IHealthCheck
     {
         try
         {
-            if (!await _probe.CanConnectAsync(cancellationToken))
-                return HealthCheckResult.Unhealthy("Database is not reachable.");
+            // Race the connectivity check against a strict 1.5-second timeout task
+            var connectTask = _probe.CanConnectAsync(cancellationToken);
+            var timeoutTask = Task.Delay(TimeSpan.FromMilliseconds(1500), cancellationToken);
 
-            if (await _probe.HasPendingMigrationsAsync(cancellationToken))
+            var completedTask = await Task.WhenAny(connectTask, timeoutTask);
+            if (completedTask == timeoutTask)
+            {
+                return HealthCheckResult.Unhealthy("Database connection timed out.");
+            }
+
+            if (!await connectTask)
+            {
+                return HealthCheckResult.Unhealthy("Database is not reachable.");
+            }
+
+            // Race the migration check against a strict 1.5-second timeout task
+            var migrationTask = _probe.HasPendingMigrationsAsync(cancellationToken);
+            var migrationTimeoutTask = Task.Delay(TimeSpan.FromMilliseconds(1500), cancellationToken);
+
+            var completedMigrationTask = await Task.WhenAny(migrationTask, migrationTimeoutTask);
+            if (completedMigrationTask == migrationTimeoutTask)
+            {
+                return HealthCheckResult.Unhealthy("Migration check timed out.");
+            }
+
+            if (await migrationTask)
+            {
                 return HealthCheckResult.Unhealthy("Database has pending migrations.");
+            }
 
             return HealthCheckResult.Healthy("Database is reachable and up to date.");
         }

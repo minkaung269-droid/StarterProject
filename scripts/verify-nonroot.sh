@@ -48,7 +48,11 @@ if [ -n "$CONTAINER" ]; then
         fail "container not found: $CONTAINER"
     fi
     # `docker top` reads the host process table: it cannot be faked by the image.
-    owner="$(docker top "$CONTAINER" -o user 2>/dev/null | awk 'NR==2 {print $1}')"
+    # Session 7 fix: under `set -euo pipefail` a failing `docker top` used to end
+    # the script here SILENTLY - two OK lines, no FAIL, no PASS, exit 1 - because
+    # stderr was discarded. A gate must never fail without saying why.
+    owner="$(docker top "$CONTAINER" -o user 2>/dev/null | awk 'NR==2 {print $1}')" \
+        || fail "could not run 'docker top' on $CONTAINER - is it running? (docker ps)"
     [ -n "$owner" ] || fail "could not read the process owner of $CONTAINER"
     if [ "$owner" = "root" ] || [ "$owner" = "0" ]; then
         fail "the process in $CONTAINER is owned by root on the host"

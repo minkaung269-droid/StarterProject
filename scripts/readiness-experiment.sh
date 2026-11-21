@@ -25,7 +25,7 @@ DB_SERVICE="${2:-sqlserver}"
 RECOVERY_TIMEOUT="${RECOVERY_TIMEOUT:-120}"
 PROBE_SETTLE="${PROBE_SETTLE:-5}"   # seconds to let one probe cycle run after a change
 
-code() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1" 2>/dev/null || echo 000; }
+code() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null || echo 000; }
 row()  { printf '  %-22s %-16s %s\n' "$1" "$2" "$3"; }
 
 live_url="$BASE_URL/healthz/live"
